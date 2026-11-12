@@ -1,0 +1,78 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+    volumes:
+      - ollama-models:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  ollama-models:
+    image: ollama/ollama:latest
+    entrypoint: ["/bin/sh", "-c"]
+    command: >-
+      OLLAMA_HOST=http://ollama:11434 ollama pull llama3.2:3b &&
+      OLLAMA_HOST=http://ollama:11434 ollama pull nomic-embed-text
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: "no"
+
+  ingest:
+    image: pwc-rag-task:local
+    build: .
+    command: ["rag-ingest"]
+    env_file:
+      - .env
+    environment:
+      LLM_PROVIDER: ollama
+      EMBEDDING_PROVIDER: ollama
+      OLLAMA_BASE_URL: http://ollama:11434
+      DOCS_DIR: /app/data/docs
+      STORAGE_DIR: /app/storage
+    volumes:
+      - rag-storage:/app/storage
+    depends_on:
+      ollama-models:
+        condition: service_completed_successfully
+    restart: "no"
+
+  app:
+    image: pwc-rag-task:local
+    build: .
+    env_file:
+      - .env
+    environment:
+      LLM_PROVIDER: ollama
+      EMBEDDING_PROVIDER: ollama
+      OLLAMA_BASE_URL: http://ollama:11434
+      DOCS_DIR: /app/data/docs
+      STORAGE_DIR: /app/storage
+    ports:
+      - "8000:8000"
+    volumes:
+      - rag-storage:/app/storage
+    depends_on:
+      ingest:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  ollama-models:
+  rag-storage:
