@@ -1,28 +1,38 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, Request
 
-from app.core.config import Settings, get_settings
+from app.api.dependencies import get_qa_service
+from app.api.schemas import AskRequest, AskResponse, ErrorResponse, HealthResponse
+from app.services.qa import QAService
 
 router = APIRouter()
 
 
-class HealthResponse(BaseModel):
-    status: str
-    llm_provider: str
-    embedding_provider: str
-    index_loaded: bool
-    index_chunks: int
+@router.post(
+    "/ask",
+    response_model=AskResponse,
+    responses={
+        422: {"model": ErrorResponse, "description": "Request validation failed"},
+        502: {"model": ErrorResponse, "description": "Language model error"},
+        503: {"model": ErrorResponse, "description": "Knowledge index unavailable"},
+        504: {"model": ErrorResponse, "description": "Language model timeout"},
+        500: {"model": ErrorResponse, "description": "Unexpected server error"},
+    },
+    tags=["question answering"],
+)
+async def ask(
+    payload: AskRequest,
+    request: Request,
+    service: Annotated[QAService, Depends(get_qa_service)],
+) -> AskResponse:
+    result = await service.ask(payload.question, payload.top_k)
+    request.state.retrieval_count = len(result["sources"])
+    return AskResponse(**result, request_id=request.state.request_id)
 
 
 @router.get("/health", response_model=HealthResponse, tags=["system"])
-async def health(settings: Annotated[Settings, Depends(get_settings)]) -> HealthResponse:
-    # The vector index is wired in a later step; until then it is reported as not loaded.
-    return HealthResponse(
-        status="ok",
-        llm_provider=settings.llm_provider,
-        embedding_provider=settings.embedding_provider,
-        index_loaded=False,
-        index_chunks=0,
-    )
+async def health(
+    service: Annotated[QAService, Depends(get_qa_service)],
+) -> HealthResponse:
+    return HealthResponse(**await service.health())

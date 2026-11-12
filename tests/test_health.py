@@ -1,13 +1,29 @@
+from unittest.mock import AsyncMock, Mock
+
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from app.core.config import Settings
 from app.main import create_app
+from app.services.qa import QAService
 
 
 def test_health_reports_providers_and_empty_index() -> None:
-    response = TestClient(create_app()).get("/health")
+    service = Mock(spec=QAService)
+    service.health = AsyncMock(
+        return_value={
+            "status": "ok",
+            "llm_provider": "ollama",
+            "embedding_provider": "ollama",
+            "index_loaded": False,
+            "index_chunks": 0,
+        }
+    )
+    app = create_app(qa_service_override=service)
+
+    with TestClient(app) as client:
+        response = client.get("/health")
 
     assert response.status_code == 200
     body = response.json()

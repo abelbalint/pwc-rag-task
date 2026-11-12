@@ -1,8 +1,10 @@
 import asyncio
+from collections.abc import Awaitable, Callable
 from typing import TypedDict
 
 from langchain_core.documents import Document
 from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import BaseMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import END, START, StateGraph
 
@@ -50,6 +52,7 @@ def build_qa_graph(
     llm: BaseChatModel,
     vector_store: VectorStore,
     score_threshold: float,
+    invoke_llm: Callable[[object], Awaitable[BaseMessage]] | None = None,
 ):
     async def retrieve(state: QAState) -> dict[str, list[RetrievedChunk]]:
         matches = await asyncio.to_thread(vector_store.search, state["question"], state["top_k"])
@@ -64,7 +67,7 @@ def build_qa_graph(
         prompt = _PROMPT.invoke(
             {"context": _format_context(state["documents"]), "question": state["question"]}
         )
-        response = await llm.ainvoke(prompt)
+        response = await (invoke_llm(prompt) if invoke_llm else llm.ainvoke(prompt))
         content = response.content
         answer = content if isinstance(content, str) else str(content)
         return {"answer": answer, "answered": True}
