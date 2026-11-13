@@ -233,6 +233,6 @@ Requests are stateless, so additional API processes or replicas are a possible n
 - There is no authentication, authorization, rate limiting, persistent request history, or monitoring/metrics endpoint.
 - Local Chroma is suitable for a single instance, not coordinated multi-worker or multi-replica writes. The local semaphore also does not coordinate across processes.
 - Docker Compose currently demonstrates the Ollama mode. The container uses `ollama/ollama:latest`, so a production deployment should pin and update that image deliberately.
-- The Docker image and Compose services were statically checked, but could not be built or started in the development environment because Docker was unavailable.
+- The Docker image and Compose flow were verified from a clean clone: the app image built, Ollama downloaded both models, ingestion indexed 55 chunks, and the health and question-answering endpoints worked. The Compose Ollama image is several gigabytes and requires a separate model download into its named volume.
 
 Reasonable next steps are a shared vector database for horizontal scale, request authentication and rate limits, a bounded work queue, quality evaluation over curated question/answer pairs, and production metrics and tracing.
