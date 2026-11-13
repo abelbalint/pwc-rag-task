@@ -30,7 +30,10 @@ def _configured_settings() -> Settings:
             with urllib.request.urlopen(
                 f"{settings.ollama_base_url.rstrip('/')}/api/tags", timeout=2
             ) as response:
-                available = {item["name"] for item in json.load(response).get("models", [])}
+                available = {
+                    item["name"].removesuffix(":latest")
+                    for item in json.load(response).get("models", [])
+                }
         except (OSError, urllib.error.URLError) as exc:
             pytest.skip(f"Ollama is unavailable at {settings.ollama_base_url}: {exc}")
 
